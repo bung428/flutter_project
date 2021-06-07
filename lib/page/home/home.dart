@@ -1,11 +1,13 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:crop/crop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_app_getx/base/base_provider.dart';
 import 'package:flutter_app_getx/page/crop/crop_by_goo.dart';
-import 'package:flutter_app_getx/page/crop/crop_controller.dart';
 import 'package:flutter_app_getx/widget/animation_list.dart';
 import 'package:flutter_app_getx/widget/custom_side_navbar.dart';
+import 'package:flutter_app_getx/widget/matrix_gesture_detector.dart';
 import 'package:get/get.dart';
 import 'package:photo_manager/photo_manager.dart';
 
@@ -170,6 +172,10 @@ class Home extends BaseProvider<HomeController> {
                           onPressed: () => Get.toNamed('/crop'),
                           child: Text('crop test'))
                       ),
+                      Expanded(flex: 1, child: TextButton(
+                          onPressed: () => Get.to(TransformDemo()),
+                          child: Text('crop TransformDemo'))
+                      ),
                       Expanded(flex: 1, child: TextButton(onPressed: insert, child: Text('insert'))),
                       Expanded(flex: 1, child: TextButton(onPressed: remove, child: Text('remove'))),
                     ],
@@ -183,69 +189,321 @@ class Home extends BaseProvider<HomeController> {
   }
 }
 
-class Test extends GetView<CropTestController> {
-  // @override
-  // PreferredSizeWidget? appBar() => null;
-  //
-  // @override
-  // Widget body(BuildContext context) {
-  //   return Text('hi');
-  // }
+class Test extends StatefulWidget {
+  @override
+  _MyHomePageState createState() => _MyHomePageState();
+}
+
+class _MyHomePageState extends State<Test> {
+  final controller = CropController(aspectRatio: 1000 / 667.0);
+  double _rotation = 0;
+  BoxShape shape = BoxShape.rectangle;
+
+  void _cropImage() async {
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final cropped = await controller.crop(pixelRatio: pixelRatio);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: Text('Crop Result'),
+            centerTitle: true,
+            actions: [
+              Builder(
+                builder: (context) => IconButton(
+                  icon: Icon(Icons.save),
+                  onPressed: () async {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Saved to gallery.'),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          body: Center(
+            child: RawImage(
+              image: cropped,
+            ),
+          ),
+        ),
+        fullscreenDialog: true,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Text('hi');
-  }
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Crop Demo'),
+        centerTitle: true,
+        leading: IconButton(
+          icon: Icon(Icons.link),
+          onPressed: () {
+          },
+        ),
+        actions: <Widget>[
+          IconButton(
+            onPressed: _cropImage,
+            tooltip: 'Crop',
+            icon: Icon(Icons.crop),
+          )
+        ],
+      ),
+      body: Column(
+        children: <Widget>[
+          Expanded(
+            child: Container(
+              color: Colors.black,
+              padding: EdgeInsets.all(8),
+              child: Crop(
+                onChanged: (decomposition) {
+                  if (_rotation != decomposition.rotation) {
+                    setState(() {
+                      _rotation = ((decomposition.rotation + 180) % 360) - 180;
+                    });
+                  }
 
+                  print(
+                      "Scale : ${decomposition.scale}, Rotation: ${decomposition.rotation}, translation: ${decomposition.translation}");
+                },
+                controller: controller,
+                shape: shape,
+                child: Image.asset(
+                  'assets/images/20191007_152848.jpg',
+                  fit: BoxFit.cover,
+                ),
+                /* It's very important to set `fit: BoxFit.cover`.
+                   Do NOT remove this line.
+                   There are a lot of issues on github repo by people who remove this line and their image is not shown correctly.
+                */
+                foreground: IgnorePointer(
+                  child: Container(
+                    alignment: Alignment.bottomRight,
+                    child: Text(
+                      'Foreground Object',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ),
+                helper: shape == BoxShape.rectangle
+                    ? Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                )
+                    : null,
+              ),
+            ),
+          ),
+          Row(
+            children: <Widget>[
+              IconButton(
+                icon: Icon(Icons.undo),
+                tooltip: 'Undo',
+                onPressed: () {
+                  controller.rotation = 0;
+                  controller.scale = 1;
+                  controller.offset = Offset.zero;
+                  setState(() {
+                    _rotation = 0;
+                  });
+                },
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: theme.sliderTheme.copyWith(
+                    trackShape: RectangularSliderTrackShape(),
+                  ),
+                  child: Slider(
+                    divisions: 360,
+                    value: _rotation,
+                    min: -180,
+                    max: 180,
+                    label: '$_rotation°',
+                    onChanged: (n) {
+                      setState(() {
+                        _rotation = n.roundToDouble();
+                        controller.rotation = _rotation;
+                      });
+                    },
+                  ),
+                ),
+              ),
+              PopupMenuButton<BoxShape>(
+                icon: Icon(Icons.crop_free),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    child: Text("Box"),
+                    value: BoxShape.rectangle,
+                  ),
+                  PopupMenuItem(
+                    child: Text("Oval"),
+                    value: BoxShape.circle,
+                  ),
+                ],
+                tooltip: 'Crop Shape',
+                onSelected: (x) {
+                  setState(() {
+                    shape = x;
+                  });
+                },
+              ),
+              PopupMenuButton<double>(
+                icon: Icon(Icons.aspect_ratio),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    child: Text("Original"),
+                    value: 1000 / 667.0,
+                  ),
+                  PopupMenuDivider(),
+                  PopupMenuItem(
+                    child: Text("16:9"),
+                    value: 16.0 / 9.0,
+                  ),
+                  PopupMenuItem(
+                    child: Text("4:3"),
+                    value: 4.0 / 3.0,
+                  ),
+                  PopupMenuItem(
+                    child: Text("1:1"),
+                    value: 1,
+                  ),
+                  PopupMenuItem(
+                    child: Text("3:4"),
+                    value: 3.0 / 4.0,
+                  ),
+                  PopupMenuItem(
+                    child: Text("9:16"),
+                    value: 9.0 / 16.0,
+                  ),
+                ],
+                tooltip: 'Aspect Ratio',
+                onSelected: (x) {
+                  controller.aspectRatio = x;
+                  setState(() {});
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-class TestPAGe extends StatefulWidget {
-  @override
-  _TestPAGeState createState() => _TestPAGeState();
-}
+class TransformDemo extends StatelessWidget {
 
-class _TestPAGeState extends State<TestPAGe> {
-  List<AssetEntity> _mediaList = [];
-  @override
-  void initState() {
-    super.initState();
-    _fetchNewMedia();
-  }
-  _fetchNewMedia() async {
-    var result = await PhotoManager.requestPermission();
-    if (result) {
-      // success
-//load the album list
-      List<AssetPathEntity> albums =
-      await PhotoManager.getAssetPathList(onlyAll: true);
-      print(albums);
-      List<AssetEntity> media = await albums[0].getAssetListPaged(0, 20);
-      print(media);
-      setState(() {
-        _mediaList = media;
-      });
-    } else {
-      // fail
-      /// if result is fail, you can call `PhotoManager.openSetting();`  to open android/ios applicaton's setting to get permission
-    }
-  }
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-        itemCount: _mediaList.length,
-        gridDelegate:
-        SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3),
-        itemBuilder: (BuildContext context, int index) {
-          return FutureBuilder(
-            future: _mediaList[index].thumbDataWithSize(200, 200),
-            builder: (BuildContext context, AsyncSnapshot<Uint8List?> snapshot) {
-              if (snapshot.connectionState == ConnectionState.done)
-                return Image.memory(
-                  snapshot.data!,
-                );
-              return Container();
-            },
-          );
-        });
+    final ValueNotifier<Matrix4> notifier = ValueNotifier(Matrix4.identity());
+    return Scaffold(
+      backgroundColor: Colors.grey,
+      appBar: AppBar(
+        title: Text('Transform Demo'),
+      ),
+      body: MatrixGestureDetector(
+        onMatrixUpdate: (m, tm, sm, rm) {
+          // print('KBG matrix : $m');
+          notifier.value = m;
+        },
+        focalPointAlignment: Alignment.center,
+        child: AnimatedBuilder(
+          animation: notifier,
+          builder: (ctx, child) {
+            return Transform(
+              transform: notifier.value,
+              child: Stack(
+                children: <Widget>[
+                  Container(
+                    color: Colors.red,
+                  ),
+                  Positioned.fill(
+                    child: Container(
+                      transform: notifier.value,
+                      color: Colors.orange,
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        child: Icon(
+                          Icons.favorite,
+                          color: Colors.yellow.withOpacity(0.5),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    // decoration: FlutterLogoDecoration(),
+                    padding: EdgeInsets.all(32),
+                    alignment: Alignment(0, -0.5),
+                    child: Text(
+                      'use your two fingers to translate / rotate / scale ...',
+                      style: Theme.of(context).textTheme.display2,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }
+
+
+// class TestPAGe extends StatefulWidget {
+//   @override
+//   _TestPAGeState createState() => _TestPAGeState();
+// }
+//
+// class _TestPAGeState extends State<TestPAGe> {
+//   List<AssetEntity> _mediaList = [];
+//   @override
+//   void initState() {
+//     super.initState();
+//     _fetchNewMedia();
+//   }
+//   _fetchNewMedia() async {
+//     var result = await PhotoManager.requestPermission();
+//     if (result) {
+//       // success
+// //load the album list
+//       List<AssetPathEntity> albums =
+//       await PhotoManager.getAssetPathList(onlyAll: true);
+//       print(albums);
+//       List<AssetEntity> media = await albums[0].getAssetListPaged(0, 20);
+//       print(media);
+//       setState(() {
+//         _mediaList = media;
+//       });
+//     } else {
+//       // fail
+//       /// if result is fail, you can call `PhotoManager.openSetting();`  to open android/ios applicaton's setting to get permission
+//     }
+//   }
+//   @override
+//   Widget build(BuildContext context) {
+//     return GridView.builder(
+//         itemCount: _mediaList.length,
+//         gridDelegate:
+//         SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3),
+//         itemBuilder: (BuildContext context, int index) {
+//           return FutureBuilder(
+//             future: _mediaList[index].thumbDataWithSize(200, 200),
+//             builder: (BuildContext context, AsyncSnapshot<Uint8List?> snapshot) {
+//               if (snapshot.connectionState == ConnectionState.done)
+//                 return Image.memory(
+//                   snapshot.data!,
+//                 );
+//               return Container();
+//             },
+//           );
+//         });
+//   }
+// }

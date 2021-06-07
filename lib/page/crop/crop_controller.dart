@@ -9,7 +9,7 @@ import 'crop_by_goo.dart';
 class CropTestController extends GetxController {
   var rotation = 0.0.obs;
 
-  final cropController = CropController(aspectRatio: 1000 / 667.0);
+  // final cropController = CropController(aspectRatio: 1000 / 667.0);
 
   void setRotation(double value) {
     rotation.value = value;

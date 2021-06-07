@@ -154,6 +154,7 @@ class _MatrixGestureDetectorState extends State<MatrixGestureDetector> {
       focalPointAlignment.alongSize(context.size!);
 
     // handle matrix scaling
+    print('KBG scale : ${details.scale}');
     if (widget.shouldScale && details.scale != 1.0) {
       double scaleDelta = scaleUpdater.update(details.scale);
       scaleDeltaMatrix = _scale(scaleDelta, focalPoint);
@@ -163,8 +164,6 @@ class _MatrixGestureDetectorState extends State<MatrixGestureDetector> {
     // handle matrix rotating
     if (widget.shouldRotate && details.rotation != 0.0) {
       double rotationDelta = rotationUpdater.update(details.rotation);
-      print('KBG rotationDelta : $rotationDelta');
-      print('KBG details.rotation : ${details.rotation}');
       rotationDeltaMatrix = _rotate(rotationDelta, focalPoint);
       matrix = rotationDeltaMatrix * matrix;
     }

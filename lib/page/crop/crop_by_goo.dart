@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter_app_getx/page/crop/crop_controller.dart';
+import 'package:flutter_app_getx/page/crop/crop_data.dart';
 import 'package:get/get.dart';
 import 'package:vector_math/vector_math_64.dart' as vm;
 import 'dart:ui' as ui;
@@ -12,15 +13,10 @@ import 'package:flutter_app_getx/values/text_style.dart';
 import 'package:flutter_app_getx/values/values.dart';
 import 'package:flutter_app_getx/widget/space_widget.dart';
 
+import 'crop_gesture.dart';
+
 
 class CropTest extends GetView<CropTestController> {
-
-  void _onPanUpdateHandler(DragUpdateDetails details) {
-    final touchPositionFromCenter = details.localPosition;
-    controller.setRotation(touchPositionFromCenter.direction);
-    controller.cropController.rotation = controller.rotation.value;
-    print('KBG _onPanUpdateHandler : ${touchPositionFromCenter.direction}');
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,64 +27,9 @@ class CropTest extends GetView<CropTestController> {
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Expanded(
-            //   flex: 1,
-            //   child: Transform(
-            //     alignment: Alignment.center,
-            //     transform: Matrix4.identity()
-            //       ..rotateZ(_rotation * pi / 180),
-            //     child: FittedBox(
-            //       child: Image.asset(
-            //         'assets/images/20191007_152848.jpg',
-            //         fit: BoxFit.cover,
-            //       ),
-            //       fit: BoxFit.cover,
-            //     ),
-            //   ),
-            // ),
             Expanded(
               flex: 1,
-              child: Stack(
-                children: [
-                  Container(
-                    padding: edgeInsets(horizontal: dimen(8)),
-                    child: GetBuilder<CropTestController>(
-                      builder: (_) => CropView(
-                        onChanged: (decomposition) {
-                          if (_.rotation.value != decomposition.rotation) {
-                            _.setRotation(((decomposition.rotation + 180) % 360) - 180);
-                            // setState(() {
-                            //   _rotation = ((decomposition.rotation + 180) % 360) - 180;
-                            // });
-                          }
-
-                          print(
-                              "Scale : ${decomposition.scale}, Rotation: ${decomposition.rotation}, translation: ${decomposition.translation}");
-                        },
-                        controller: _.cropController,
-                        child: Image.asset(
-                          'assets/images/20191007_152848.jpg',
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onScaleStart: (details) {
-                      print('KBG onScaleStart : ${details.focalPoint}');
-                    },
-                    onScaleUpdate: (ScaleUpdateDetails details) {
-                      print('KBG rotation : ${details.rotation}');
-                      print('KBG pointerCount : ${details.pointerCount}');
-                      print('KBG verticalScale : ${details.verticalScale}');
-                      print('KBG horizontalScale : ${details.horizontalScale}');
-                      print('KBG scale : ${details.scale}');
-                      print('KBG focalPoint : ${details.focalPoint} x ${details.focalPoint.direction}');
-                      print('KBG localFocalPoint : ${details.localFocalPoint} x ${details.localFocalPoint.direction}');
-                    },
-                  )
-                ],
-              ),
+              child: CropGesture(),
             ),
             ColSpace(height: dimen(20)),
             Row(
@@ -114,7 +55,7 @@ class CropTest extends GetView<CropTestController> {
                 onChanged: (n) {
                   print("KBG onChanged : n : $n : n.roundToDouble() : ${n.roundToDouble()}");
                   controller.setRotation(n.roundToDouble());
-                  controller.cropController.rotation = controller.rotation.value;
+                  // controller.cropController.rotation = controller.rotation.value;
                   // setState(() {
                   //   _rotation = n.roundToDouble();
                   //   controller.rotation = _rotation;
@@ -140,285 +81,285 @@ class CropTest extends GetView<CropTestController> {
   }
 }
 
-class CropView extends StatefulWidget {
-
-  final Widget child;
-  final CropController controller;
-  final ValueChanged<MatrixDecomposition>? onChanged;
-
-  const CropView({
-    Key? key,
-    required this.child,
-    required this.controller,
-    this.onChanged,
-  }) : super(key: key);
-
-  @override
-  _CropViewState createState() => _CropViewState();
-}
-
-class _CropViewState extends State<CropView> with TickerProviderStateMixin {
-
-  final _key = GlobalKey();
-  final _parent = GlobalKey();
-  final _repaintBoundaryKey = GlobalKey();
-
-  double _previousScale = 1;
-  Offset _previousOffset = Offset.zero;
-  Offset _startOffset = Offset.zero;
-  Offset _endOffset = Offset.zero;
-  double _previousGestureRotation = 0.0;
-
-  int _previousPointerCount = 0;
-
-  late AnimationController _controller;
-  late CurvedAnimation _animation;
-
-  void _handleOnChanged() {
-    print("KBG _handleOnChanged");
-    widget.onChanged?.call(MatrixDecomposition(
-        scale: widget.controller.scale,
-        rotation: widget.controller.rotation,
-        translation: widget.controller.offset));
-  }
-
-  void _onScaleUpdate(ScaleUpdateDetails details) {
-    if (details.pointerCount > 1) {
-      print("KBG _onScaleUpdate : pointerCount > 1");
-      // In the first touch, we reset all the values.
-      if (_previousPointerCount != details.pointerCount) {
-        _previousPointerCount = details.pointerCount;
-        _previousGestureRotation = 0.0;
-      }
-
-      // Instead of directly embracing the details.rotation, we need to
-      // perform calculation to ensure that each round of rotation is smooth.
-      // A user rotate the image using finger and release is considered as a
-      // round. Without this calculation, the rotation degree of the image will
-      // be reset.
-      final gestureRotation = vm.degrees(details.rotation);
-
-      // Within a round of rotation, the details.rotation is provided with
-      // incremented value when user rotates. We don't need this, all we
-      // want is the offset.
-      final gestureRotationOffset = _previousGestureRotation - gestureRotation;
-
-      // Remove the offset and constraint the degree scope to 0° <= degree <=
-      // 360°. Constraint the scope is unnecessary, however, by doing this,
-      // it would make our life easier when debugging.
-      final rotationAfterCalculation =
-          (widget.controller.rotation - gestureRotationOffset) % 360;
-
-      /* details.rotation is in radians, convert this to degrees and set
-        our rotation */
-      widget.controller._rotation = rotationAfterCalculation;
-      _previousGestureRotation = gestureRotation;
-    }
-
-    setState(() {});
-    _handleOnChanged();
-  }
-
-  @override
-  void initState() {
-    //Setup animation.
-    _controller = AnimationController(
-      vsync: this,
-      duration: Duration(milliseconds: 200),
-    );
-
-    _animation = CurvedAnimation(curve: Curves.easeInOut, parent: _controller);
-    _animation.addListener(() {
-      if (_animation.isCompleted) {
-        // _reCenterImage(false);
-      }
-      setState(() {});
-    });
-    super.initState();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final s = widget.controller._scale * widget.controller._getMinScale();
-    final o = Offset.lerp(_startOffset, _endOffset, _animation.value)!;
-    final radians = widget.controller._rotation * pi / 180;
-    print("KBG cropView : scale : $s");
-
-    Widget _buildInnerCanvas() {
-      final ip = IgnorePointer(
-        key: _key,
-        child: Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.identity()
-            ..translate(o.dx, o.dy, 0)
-            ..rotateZ(radians)
-            ..scale(1.0, 1.0, 1.0),
-          child: FittedBox(
-            child: widget.child,
-            fit: BoxFit.cover,
-          ),
-        ),
-      );
-
-      List<Widget> widgets = [];
-
-      // if (widget.background != null) {
-      //   widgets.add(widget.background!);
-      // }
-
-      widgets.add(ip);
-
-      // if (widget.foreground != null) {
-      //   widgets.add(widget.foreground!);
-      // }
-
-      if (widgets.length == 1) {
-        return ip;
-      } else {
-        return Stack(
-          fit: StackFit.expand,
-          children: widgets,
-        );
-      }
-    }
-
-    Widget _buildRepaintBoundary() {
-      final repaint = RepaintBoundary(
-        key: _repaintBoundaryKey,
-        child: _buildInnerCanvas(),
-      );
-
-      // if (widget.helper == null) {
-      //   return repaint;
-      // }
-
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          repaint,
-          // widget.helper!
-        ],
-      );
-    }
-
-    final gd = GestureDetector(
-      onScaleStart: (details) {
-        _previousOffset = details.focalPoint;
-        _previousScale = max(widget.controller._scale, 1);
-      },
-      onScaleUpdate: _onScaleUpdate,
-      onScaleEnd: (details) {
-        widget.controller._scale = max(widget.controller._scale, 1);
-        _previousPointerCount = 0;
-        // _reCenterImage();
-      },
-    );
-
-    List<Widget> over = [
-      CropRenderObjectWidget(
-        aspectRatio: widget.controller._aspectRatio,
-        backgroundColor: Colors.black,
-        shape: BoxShape.rectangle,
-        // dimColor: Color.fromRGBO(0, 0, 0, 0.8),
-        dimColor: Color.fromRGBO(0, 0, 0, 0.8),
-        child: _buildRepaintBoundary(),
-      ),
-    ];
-
-    // if (widget.overlay != null) {
-    //   over.add(widget.overlay!);
-    // }
-    //
-    // if (widget.interactive) {
-    //   over.add(gd);
-    // }
-
-    return ClipRect(
-      key: _parent,
-      child: Stack(
-        fit: StackFit.expand,
-        children: over,
-      ),
-    );
-  }
-}
-
-typedef _CropCallback = Future<ui.Image> Function(double pixelRatio);
-
-class CropController extends ChangeNotifier {
-  double _aspectRatio = 1;
-  double _rotation = 0;
-  double _scale = 1;
-  Offset _offset = Offset.zero;
-  _CropCallback? _cropCallback;
-
-  double get aspectRatio => _aspectRatio;
-
-  set aspectRatio(double value) {
-    _aspectRatio = value;
-    notifyListeners();
-  }
-
-  double get scale => max(_scale, 1);
-
-  set scale(double value) {
-    _scale = max(value, 1);
-    notifyListeners();
-  }
-
-  double get rotation => _rotation;
-
-  /// Sets the desired rotation.
-  set rotation(double value) {
-    _rotation = value;
-    notifyListeners();
-  }
-
-  Offset get offset => _offset;
-
-  set offset(Offset value) {
-    _offset = value;
-    notifyListeners();
-  }
-
-  Matrix4 get transform => Matrix4.identity()
-    ..translate(_offset.dx, _offset.dy, 0)
-    ..rotateZ(_rotation)
-    ..scale(_scale, _scale, 1);
-
-  CropController({
-    double aspectRatio: 1.0,
-    double scale: 1.0,
-    double rotation: 0,
-  }) {
-    _aspectRatio = aspectRatio;
-    _scale = scale;
-    _rotation = rotation;
-  }
-
-  double _getMinScale() {
-    final r = vm.radians(_rotation % 360);
-    final rabs = r.abs();
-
-    final sinr = sin(rabs).abs();
-    final cosr = cos(rabs).abs();
-
-    final x = cosr * _aspectRatio + sinr;
-    final y = sinr * _aspectRatio + cosr;
-
-    final m = max(x / _aspectRatio, y);
-
-    return m;
-  }
-
-  Future<ui.Image> crop({double pixelRatio: 1}) {
-    if (_cropCallback == null) {
-      return Future.value(null);
-    }
-
-    return _cropCallback!.call(pixelRatio);
-  }
-}
+// class CropView extends StatefulWidget {
+//
+//   final Widget child;
+//   final CropController controller;
+//   final ValueChanged<MatrixDecomposition>? onChanged;
+//
+//   const CropView({
+//     Key? key,
+//     required this.child,
+//     required this.controller,
+//     this.onChanged,
+//   }) : super(key: key);
+//
+//   @override
+//   _CropViewState createState() => _CropViewState();
+// }
+//
+// class _CropViewState extends State<CropView> with TickerProviderStateMixin {
+//
+//   final _key = GlobalKey();
+//   final _parent = GlobalKey();
+//   final _repaintBoundaryKey = GlobalKey();
+//
+//   double _previousScale = 1;
+//   Offset _previousOffset = Offset.zero;
+//   Offset _startOffset = Offset.zero;
+//   Offset _endOffset = Offset.zero;
+//   double _previousGestureRotation = 0.0;
+//
+//   int _previousPointerCount = 0;
+//
+//   late AnimationController _controller;
+//   late CurvedAnimation _animation;
+//
+//   void _handleOnChanged() {
+//     print("KBG _handleOnChanged");
+//     widget.onChanged?.call(MatrixDecomposition(
+//         scale: widget.controller.scale,
+//         rotation: widget.controller.rotation,
+//         translation: widget.controller.offset));
+//   }
+//
+//   void _onScaleUpdate(ScaleUpdateDetails details) {
+//     if (details.pointerCount > 1) {
+//       print("KBG _onScaleUpdate : pointerCount > 1");
+//       // In the first touch, we reset all the values.
+//       if (_previousPointerCount != details.pointerCount) {
+//         _previousPointerCount = details.pointerCount;
+//         _previousGestureRotation = 0.0;
+//       }
+//
+//       // Instead of directly embracing the details.rotation, we need to
+//       // perform calculation to ensure that each round of rotation is smooth.
+//       // A user rotate the image using finger and release is considered as a
+//       // round. Without this calculation, the rotation degree of the image will
+//       // be reset.
+//       final gestureRotation = vm.degrees(details.rotation);
+//
+//       // Within a round of rotation, the details.rotation is provided with
+//       // incremented value when user rotates. We don't need this, all we
+//       // want is the offset.
+//       final gestureRotationOffset = _previousGestureRotation - gestureRotation;
+//
+//       // Remove the offset and constraint the degree scope to 0° <= degree <=
+//       // 360°. Constraint the scope is unnecessary, however, by doing this,
+//       // it would make our life easier when debugging.
+//       final rotationAfterCalculation =
+//           (widget.controller.rotation - gestureRotationOffset) % 360;
+//
+//       /* details.rotation is in radians, convert this to degrees and set
+//         our rotation */
+//       widget.controller._rotation = rotationAfterCalculation;
+//       _previousGestureRotation = gestureRotation;
+//     }
+//
+//     setState(() {});
+//     _handleOnChanged();
+//   }
+//
+//   @override
+//   void initState() {
+//     //Setup animation.
+//     _controller = AnimationController(
+//       vsync: this,
+//       duration: Duration(milliseconds: 200),
+//     );
+//
+//     _animation = CurvedAnimation(curve: Curves.easeInOut, parent: _controller);
+//     _animation.addListener(() {
+//       if (_animation.isCompleted) {
+//         // _reCenterImage(false);
+//       }
+//       setState(() {});
+//     });
+//     super.initState();
+//   }
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     final s = widget.controller._scale * widget.controller._getMinScale();
+//     final o = Offset.lerp(_startOffset, _endOffset, _animation.value)!;
+//     final radians = widget.controller._rotation * pi / 180;
+//     print("KBG cropView : scale : $s");
+//
+//     Widget _buildInnerCanvas() {
+//       final ip = IgnorePointer(
+//         key: _key,
+//         child: Transform(
+//           alignment: Alignment.center,
+//           transform: Matrix4.identity()
+//             ..translate(o.dx, o.dy, 0)
+//             ..rotateZ(radians)
+//             ..scale(1.0, 1.0, 1.0),
+//           child: FittedBox(
+//             child: widget.child,
+//             fit: BoxFit.cover,
+//           ),
+//         ),
+//       );
+//
+//       List<Widget> widgets = [];
+//
+//       // if (widget.background != null) {
+//       //   widgets.add(widget.background!);
+//       // }
+//
+//       widgets.add(ip);
+//
+//       // if (widget.foreground != null) {
+//       //   widgets.add(widget.foreground!);
+//       // }
+//
+//       if (widgets.length == 1) {
+//         return ip;
+//       } else {
+//         return Stack(
+//           fit: StackFit.expand,
+//           children: widgets,
+//         );
+//       }
+//     }
+//
+//     Widget _buildRepaintBoundary() {
+//       final repaint = RepaintBoundary(
+//         key: _repaintBoundaryKey,
+//         child: _buildInnerCanvas(),
+//       );
+//
+//       // if (widget.helper == null) {
+//       //   return repaint;
+//       // }
+//
+//       return Stack(
+//         fit: StackFit.expand,
+//         children: [
+//           repaint,
+//           // widget.helper!
+//         ],
+//       );
+//     }
+//
+//     final gd = GestureDetector(
+//       onScaleStart: (details) {
+//         _previousOffset = details.focalPoint;
+//         _previousScale = max(widget.controller._scale, 1);
+//       },
+//       onScaleUpdate: _onScaleUpdate,
+//       onScaleEnd: (details) {
+//         widget.controller._scale = max(widget.controller._scale, 1);
+//         _previousPointerCount = 0;
+//         // _reCenterImage();
+//       },
+//     );
+//
+//     List<Widget> over = [
+//       CropRenderObjectWidget(
+//         aspectRatio: widget.controller._aspectRatio,
+//         backgroundColor: Colors.black,
+//         shape: BoxShape.rectangle,
+//         // dimColor: Color.fromRGBO(0, 0, 0, 0.8),
+//         dimColor: Color.fromRGBO(0, 0, 0, 0.8),
+//         child: _buildRepaintBoundary(),
+//       ),
+//     ];
+//
+//     // if (widget.overlay != null) {
+//     //   over.add(widget.overlay!);
+//     // }
+//     //
+//     // if (widget.interactive) {
+//     //   over.add(gd);
+//     // }
+//
+//     return ClipRect(
+//       key: _parent,
+//       child: Stack(
+//         fit: StackFit.expand,
+//         children: over,
+//       ),
+//     );
+//   }
+// }
+//
+// typedef _CropCallback = Future<ui.Image> Function(double pixelRatio);
+//
+// class CropController extends ChangeNotifier {
+//   double _aspectRatio = 1;
+//   double _rotation = 0;
+//   double _scale = 1;
+//   Offset _offset = Offset.zero;
+//   _CropCallback? _cropCallback;
+//
+//   double get aspectRatio => _aspectRatio;
+//
+//   set aspectRatio(double value) {
+//     _aspectRatio = value;
+//     notifyListeners();
+//   }
+//
+//   double get scale => max(_scale, 1);
+//
+//   set scale(double value) {
+//     _scale = max(value, 1);
+//     notifyListeners();
+//   }
+//
+//   double get rotation => _rotation;
+//
+//   /// Sets the desired rotation.
+//   set rotation(double value) {
+//     _rotation = value;
+//     notifyListeners();
+//   }
+//
+//   Offset get offset => _offset;
+//
+//   set offset(Offset value) {
+//     _offset = value;
+//     notifyListeners();
+//   }
+//
+//   Matrix4 get transform => Matrix4.identity()
+//     ..translate(_offset.dx, _offset.dy, 0)
+//     ..rotateZ(_rotation)
+//     ..scale(_scale, _scale, 1);
+//
+//   CropController({
+//     double aspectRatio: 1.0,
+//     double scale: 1.0,
+//     double rotation: 0,
+//   }) {
+//     _aspectRatio = aspectRatio;
+//     _scale = scale;
+//     _rotation = rotation;
+//   }
+//
+//   double _getMinScale() {
+//     final r = vm.radians(_rotation % 360);
+//     final rabs = r.abs();
+//
+//     final sinr = sin(rabs).abs();
+//     final cosr = cos(rabs).abs();
+//
+//     final x = cosr * _aspectRatio + sinr;
+//     final y = sinr * _aspectRatio + cosr;
+//
+//     final m = max(x / _aspectRatio, y);
+//
+//     return m;
+//   }
+//
+//   Future<ui.Image> crop({double pixelRatio: 1}) {
+//     if (_cropCallback == null) {
+//       return Future.value(null);
+//     }
+//
+//     return _cropCallback!.call(pixelRatio);
+//   }
+// }
 
 class MatrixDecomposition {
 

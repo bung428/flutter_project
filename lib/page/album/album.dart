@@ -50,7 +50,7 @@ class AlbumPage extends BaseProvider<HomeController> {
                 ),
               ),
               TextButton(onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => TestPAGe()));
+                // Navigator.push(context, MaterialPageRoute(builder: (context) => TestPAGe()));
               }, child: Text('button'))
             ],
           ),
