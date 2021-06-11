@@ -72,8 +72,8 @@ class _GetxTestAppState extends State<GetxTestApp> {
             binding: HomeBinding()
         ),
         GetPage(
-            name: '/crop',
-            page: () => CropTest(),
+            name: '/crop_by_goo',
+            page: () => CropByGooPage(imageWidth: 3024.0, imageHeight: 4032.0,),
             binding: CropBinding()
         ),
       ],

@@ -12,6 +12,7 @@ class TouchInk extends StatefulWidget {
   final ValueChanged<bool>? onHighlightChanged;
   final ValueChanged<bool>? onHover;
   final MouseCursor? mouseCursor;
+  final Color? bgColor;
   final Color? focusColor;
   final Color? hoverColor;
   final Color? highlightColor;
@@ -40,6 +41,7 @@ class TouchInk extends StatefulWidget {
     this.onHighlightChanged,
     this.onHover,
     this.mouseCursor,
+    this.bgColor = Colors.transparent,
     this.focusColor,
     this.hoverColor,
     this.highlightColor,
@@ -75,6 +77,7 @@ class _TouchInkState extends State<TouchInk> {
   @override
   Widget build(BuildContext context) {
     return Material(
+      color: widget.bgColor,
       shape: widget.circleBoard ? CircleBorder() : null,
       clipBehavior: widget.circleBoard ? Clip.hardEdge : Clip.none,
       child: InkWell(

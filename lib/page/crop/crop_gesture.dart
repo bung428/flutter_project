@@ -1,12 +1,24 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_app_getx/values/text_style.dart';
-import 'package:flutter_app_getx/widget/transformations_demo_inertial_motion.dart';
+import 'package:flutter_app_getx/values/values.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
+import 'package:flutter/rendering.dart';
 
 class CropGesture extends StatefulWidget {
+
+  final bool shouldTranslate;
+  final bool shouldScale;
+  final bool shouldRotate;
+  final double ratio;
+
+  const CropGesture({
+    Key? key,
+    required this.ratio,
+    this.shouldTranslate = true,
+    this.shouldScale = true,
+    this.shouldRotate = true,
+  }) : super(key: key);
 
   @override
   _CropGestureState createState() => _CropGestureState();
@@ -21,20 +33,15 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
   final double minViewScale = 0.8;
   final double maxViewScale = 20.0;
 
+  late double _previousScale;
+  double _rotation = 0.0;
   double? _imageWidth;
   double? _imageHeight;
-
-  late double _scaleStart;
-  late double _scaleBase;
-  late Offset _translateFromScene;
-  double _oldRotate = 0.0;
 
   late AnimationController _controller;
   Animation<double>? _animation;
 
   ScaleGestureData? _centerInsideMatrix;
-
-  _ScaleGestureMatrixType? _scaleGestureMatrixType;
 
   @override
   void initState() {
@@ -44,73 +51,106 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-        key: viewGlobalKey,
-        behavior: HitTestBehavior.opaque,
-        onScaleStart: onScaleStart,
-        onScaleUpdate: onScaleUpdate,
-        onScaleEnd: onScaleEnd,
-        child: Container(
-          width: double.infinity,
-          height: double.infinity,
-          child: Transform(
-            transform: _matrix4,
-            alignment: Alignment.topLeft,
-            child: Container(
-              width: double.infinity,
-              height: double.infinity,
-              color: Colors.red.withAlpha(0x3f),
-              alignment: AlignmentDirectional.center,
-              // helper.vector3ToOffset(_gestureMatrix4.getTranslation())
-              child: Stack(
-                children: [
-                  Image.asset(
-                    'assets/images/20191007_152848.jpg',
-                    fit: BoxFit.cover,
-                    frameBuilder: (BuildContext context, Widget child, int? frame, bool wasSynchronouslyLoaded) {
-                      if(_imageWidth == null || _imageHeight == null) {
-                        if(child is Semantics) {
-                          final rawImage = child.child;
-                          if(rawImage is RawImage) {
-                            _imageWidth = rawImage.image?.width.toDouble();
-                            _imageHeight = rawImage.image?.height.toDouble();
-                          }
-                        }
+    return Stack(
+      children: [
+        GestureDetector(
+          key: viewGlobalKey,
+          behavior: HitTestBehavior.opaque,
+          onScaleStart: onScaleStart,
+          onScaleUpdate: onScaleUpdate,
+          onScaleEnd: onScaleEnd,
+          child: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: BoxDecoration(
+                image: DecorationImage(
+                  image: AssetImage('assets/images/cameraAutoSampleBgColorTransparent.png',),
+                  fit: BoxFit.cover,
+                )
+            ),
+            child: Transform(
+              transform: _matrix4,
+              alignment: Alignment.topLeft,
+              child: Image.asset(
+                'assets/images/20191007_152848.jpg',
+                fit: BoxFit.contain,
+                width: double.infinity,
+                height: double.infinity,
+                frameBuilder: (BuildContext context, Widget child, int? frame, bool wasSynchronouslyLoaded) {
+                  if(_imageWidth == null || _imageHeight == null) {
+                    if(child is Semantics) {
+                      final rawImage = child.child;
+                      if(rawImage is RawImage) {
+                        _imageWidth = rawImage.image?.width.toDouble();
+                        _imageHeight = rawImage.image?.height.toDouble();
+                        // _aspectRatio = (_imageWidth ?? 1.0) / (_imageHeight ?? 1.0);
                       }
-                      final width = _imageWidth;
-                      final height = _imageHeight;
-                      if(width != null && height != null) {
-                        return Stack(
-                          alignment: AlignmentDirectional.center,
-                          children: [
-                            AspectRatio(
-                              aspectRatio: width / height,
-                              child: Image.asset('assets/images/cameraAutoSampleBgColorTransparent.png', fit: BoxFit.cover),
+                    }
+                  }
+                  final width = _imageWidth;
+                  final height = _imageHeight;
+                  if(width != null && height != null) {
+                    return Stack(
+                      children: [
+                        child,
+                        Positioned.fill(
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Offset : ${Offset(_matrix4.getTranslation().x, _matrix4.getTranslation().y)}'
+                                  '\nScale : ${_matrix4.getMaxScaleOnAxis()}'
+                              , style: textStyle.white500(20),
                             ),
-                            child,
-                          ],
-                        );
-                      }
+                          ),
+                        ),
+                      ],
+                    );
+                  }
 
-                      return child;
-                    },
-                  ),
-                  Center(
-                    child: Text('Offset : ${Offset(_matrix4.getTranslation().x, _matrix4.getTranslation().y)}\nScale : ${_matrix4
-                        .getMaxScaleOnAxis()}\nRotate : ${_matrix4
-                        .getRotation()}', style: textStyle.white500(20),),
-                  ),
-                ],
+                  return child;
+                },
               ),
             ),
           ),
-        )
+        ),
+        CropRenderObjectWidget(
+          aspectRatio: widget.ratio,
+          backgroundColor: Colors.transparent,
+          shape: BoxShape.rectangle,
+          dimColor: Colors.black.withOpacity(0.6),
+          child: Text('test ing'),
+        ),
+      ],
     );
   }
 
+  _ValueUpdater<double> scaleUpdater = _ValueUpdater(
+    value: 1.0,
+    onUpdate: (oldVal, newVal) => newVal / oldVal,
+  );
+  _ValueUpdater<double> rotationUpdater = _ValueUpdater(
+    value: 0.0,
+    onUpdate: (oldVal, newVal) => newVal - oldVal,
+  );
+
+  Offset _startOffset = Offset.zero;
+  Offset _endOffset = Offset.zero;
+
   void onScaleStart(ScaleStartDetails details) {
-    if (_centerInsideMatrix == null && _imageWidth != null && _imageHeight != null && viewGlobalKey.currentContext != null) {
-      _centerInsideMatrix = ScaleGestureData.centerInside(viewGlobalKey.currentContext!.size!, Size(_imageWidth!, _imageHeight!));
+    final Offset focalPointScene = fromViewport(
+      details.localFocalPoint,
+      _matrix4,
+    );
+    _startOffset = focalPointScene;
+
+    double scale = _matrix4.getMaxScaleOnAxis();
+    _previousScale = scale;
+    scaleUpdater.value = scale;
+
+    rotationUpdater.value = _rotation;
+
+    if (_centerInsideMatrix == null && viewGlobalKey.currentContext != null && _imageWidth != null && _imageHeight != null) {
+      _centerInsideMatrix = ScaleGestureData.centerInside(viewGlobalKey.currentContext!.size!, Size(_imageWidth!, _imageHeight!), _rotation);
       _animation?.removeListener(_onAnimate);
       _animation = null;
       _controller.reset();
@@ -122,102 +162,50 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
       return;
     }
 
-    double scale = _matrix4.getMaxScaleOnAxis();
     final Offset focalPointScene = fromViewport(
       details.localFocalPoint,
       _matrix4,
     );
+    _endOffset = focalPointScene;
 
-    if(_scaleGestureMatrixType == null) {
-      if (details.pointerCount == 1) {
-        _scaleGestureMatrixType = _ScaleGestureMatrixType.TRANSITION;
-        _translateFromScene = focalPointScene;
-      }
-      if(details.pointerCount > 1 && details.scale != 1.0) {
-        print('KBG do scaling');
-        // _scaleGestureMatrixType = _ScaleGestureMatrixType.SCALE;
-        // _scaleStart = scale;
-        // _scaleBase = details.scale;
-      }
-      if(details.pointerCount > 1 && details.rotation != 0.0) {
-        print('KBG do rotation');
-        double rotationDelta = details.rotation - _oldRotate;
-        _oldRotate = details.rotation;
-        var dx = (1 - cos(rotationDelta)) * details.localFocalPoint.dx + sin(rotationDelta) * details.localFocalPoint.dy;
-        var dy = (1 - cos(rotationDelta)) * details.localFocalPoint.dy - sin(rotationDelta) * details.localFocalPoint.dx;
-        _matrix4..rotateZ(rotationDelta)..translate(dx, dy);
+    if (details.pointerCount < 2) {
+      Offset translationChange = _endOffset - _startOffset;
+      _matrix4.translate(translationChange.dx, translationChange.dy);
 
-        // setState(() {});
-      }
-      // if(details.pointerCount == 1) {
-      //   _scaleGestureMatrixType = _ScaleGestureMatrixType.TRANSITION;
-      //   _translateFromScene = focalPointScene;
-      // } else if(details.pointerCount == 2) {
-      //   _scaleGestureMatrixType = _ScaleGestureMatrixType.SCALE;
-      //   _scaleStart = scale;
-      //   _scaleBase = details.scale;
-      // }
+      setState(() {});
     }
 
-    final type = _scaleGestureMatrixType;
-    if(type != null) {
-      switch(type) {
-        case _ScaleGestureMatrixType.SCALE:
-          final double desiredScale = _scaleStart * (1 - _scaleBase + details.scale);
-          final double scaleChange = desiredScale / scale;
-          _matrix4 = matrixScale(_matrix4, scaleChange, minViewScale, maxViewScale)!;
-          final Offset focalPointSceneNext = fromViewport(
-            details.localFocalPoint,
-            _matrix4!,
-          );
-          Offset offset = focalPointSceneNext - focalPointScene;
-          _matrix4.translate(offset.dx, offset.dy);
-          // if (!widget.onScaled(true)) {
-          setState(() {});
-          // }
-          break;
-        case _ScaleGestureMatrixType.TRANSITION:
-          final Offset translationChange = focalPointScene - _translateFromScene;
-          _matrix4!.translate(translationChange.dx, translationChange.dy);
-          // if (!widget.onScaled(true)) {
-            setState(() {});
-          // }
-          break;
-      }
+    if (details.scale != 1.0) {
+      double scaleDelta = scaleUpdater.update(_previousScale * details.scale);
+      _matrix4.scale(scaleDelta);
+      final Offset focalPointSceneNext = fromViewport(
+        details.localFocalPoint,
+        _matrix4,
+      );
+      Offset offset = focalPointSceneNext - focalPointScene;
+      _matrix4.translate(offset.dx, offset.dy);
+
+      setState(() {});
+      // double scale = _matrix4.getMaxScaleOnAxis();
+      // _previousScale = scale;
     }
 
-    // if(details.pointerCount == 1) {
-    //   print('KBG pointer 1');
-    //   _translateFromScene = focalPointScene;
-    //
-    //   final Offset translationChange = focalPointScene - _translateFromScene;
-    //   _matrix4.translate(translationChange.dx, translationChange.dy);
-    //   setState(() {});
-    // }
-    //
-    // if (details.scale != 1.0) {
-    //   _scaleStart = scale;
-    //   _scaleBase = details.scale;
-    //
-    //   final double desiredScale = _scaleStart * (1 - _scaleBase + details.scale);
-    //   final double scaleChange = desiredScale / scale;
-    //   _matrix4 = matrixScale(_matrix4, scaleChange, minViewScale, maxViewScale)!;
-    //   final Offset focalPointSceneNext = fromViewport(
-    //     details.localFocalPoint,
-    //     _matrix4,
-    //   );
-    //   Offset offset = focalPointSceneNext - focalPointScene;
-    //   _matrix4.translate(offset.dx, offset.dy);
-    //   setState(() {});
-    // }
-    //
-    // if (details.rotation != 0.0) {
-    //   double rotationDelta = details.rotation - _oldRotate;
-    //   _oldRotate = details.rotation;
-    //   _matrix4 = _rotate(_matrix4, rotationDelta, details.localFocalPoint);
-    // }
+    if (details.rotation != 0.0) {
+      double rotationDelta = rotationUpdater.update(details.rotation);
+      _matrix4.rotateZ(rotationDelta);
+      print('KBG scaleUpd rot : $rotationDelta');
+      final Offset focalPointSceneNext = fromViewport(
+        details.localFocalPoint,
+        _matrix4,
+      );
+      Offset offset = focalPointSceneNext - focalPointScene;
+      _matrix4.translate(offset.dx, offset.dy);
 
-    // setState(() {});
+      setState(() {});
+      _rotation = rotationDelta;
+    }
+
+    // _currentPointerCnt = details.pointerCount;
   }
 
   _MatrixAnimation? _beginMatrixAnimation;
@@ -228,43 +216,83 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
       return;
     }
 
-    if(_matrix4.getMaxScaleOnAxis() < 1.0) {
-      _endAnimate(Offset.zero, 1);
-    } else {
-      final double velocityTotal = details.velocity.pixelsPerSecond.dx
-          .abs()
-          + details.velocity.pixelsPerSecond.dy.abs();
-      Offset matrix4Offset = vector3ToOffset(_matrix4.getTranslation());
-      final scaledOffset = _centerInsideMatrix!.offset * _matrix4.getMaxScaleOnAxis();
-      final scaledSize = _centerInsideMatrix!.size * _matrix4.getMaxScaleOnAxis();
+    print('-----------------------------------------------------------------------------------------------');
+    print('KBG scaleEnd rot : $_rotation');
+    print('KBG scaleEnd scale : ${_matrix4.getMaxScaleOnAxis()}');
 
-      if(velocityTotal != 0) {
-        final InertialMotion inertialMotion = InertialMotion(
-            details.velocity, matrix4Offset);
-        matrix4Offset = inertialMotion.finalPosition;
-        Offset limitedOffset = limitedLayoutOffset(
-          _centerInsideMatrix!.layout, matrix4Offset + scaledOffset, scaledSize,);
-        limitedOffset -= scaledOffset;
-        _endAnimate(limitedOffset, _matrix4.getMaxScaleOnAxis());
-      } else {
-        Offset limitedOffset = limitedLayoutOffset(
-          _centerInsideMatrix!.layout, matrix4Offset + scaledOffset, scaledSize,);
-        limitedOffset -= scaledOffset;
-        if(limitedOffset != matrix4Offset) {
-          _endAnimate(limitedOffset, _matrix4.getMaxScaleOnAxis());
-        }
-      }
+    if(_matrix4.getMaxScaleOnAxis() <= 1.0) {
+      _endAnimate(Offset.zero, 1.0, _rotation);
+      _matrix4.rotateZ(0.123423);
+      setState(() {
+
+      });
     }
+    // else {
+    //   final double velocityTotal = details.velocity.pixelsPerSecond.dx.abs()
+    //       + details.velocity.pixelsPerSecond.dy.abs();
+    //   Offset matrix4Offset = vector3ToOffset(_matrix4.getTranslation());
+    //   final scaledOffset = _centerInsideMatrix!.offset * _matrix4.getMaxScaleOnAxis();
+    //   final scaledSize = _centerInsideMatrix!.size * _matrix4.getMaxScaleOnAxis();
+    //
+    //   final Offset offset = fromViewport(
+    //     vector3ToOffset(_matrix4.getTranslation()),
+    //     _matrix4,
+    //   );
+    //
+    //
+    //   print('KBG offset : dx : ${offset.dx}');
+    //   print('KBG offset : dy : ${offset.dy}');
+    //   // final width = (scaledSize.width - _centerInsideMatrix!.size.width);
+    //   // final height = (scaledSize.height - _centerInsideMatrix!.size.height);
+    //   // print('KBG _centerInsideMatrix!.size : ${_centerInsideMatrix!.size}');
+    //   // print('KBG scaledSize : $scaledSize');
+    //   // print('KBG width : $width');
+    //   // print('KBG height : $height');
+    //   // _matrix4.translate(offset.dx / 2, offset.dy / 2);
+    //
+    //
+    //   if (_currentPointerCnt > 1) {
+    //
+    //   }
+    //   // } else {
+    //   //   final width = (scaledSize.width - _centerInsideMatrix!.size.width);
+    //   //   final height = (scaledSize.height - _centerInsideMatrix!.size.height);
+    //   //   print('KBG _centerInsideMatrix!.size : ${_centerInsideMatrix!.size}');
+    //   //   print('KBG scaledSize : $scaledSize');
+    //   //   print('KBG width : $width');
+    //   //   print('KBG height : $height');
+    //   // }
+    //   // _matrix4.translate(_matrix4.getTranslation().x / 2, _matrix4.getTranslation().y / 2);
+    //   setState(() {});
+    //
+    //   if(velocityTotal != 0) {
+    //     final InertialMotion inertialMotion = InertialMotion(
+    //         details.velocity, matrix4Offset);
+    //     matrix4Offset = inertialMotion.finalPosition;
+    //     // Offset limitedOffset = limitedLayoutOffset(_centerInsideMatrix!.layout, matrix4Offset + scaledOffset, scaledSize,);
+    //     // limitedOffset -= scaledOffset;
+    //     // _endAnimate(limitedOffset, _matrix4.getMaxScaleOnAxis(), _rotation);
+    //   } else {
+    //     Offset limitedOffset = limitedLayoutOffset(
+    //       _centerInsideMatrix!.layout, matrix4Offset + scaledOffset, scaledSize,);
+    //     limitedOffset -= scaledOffset;
+    //     if(limitedOffset != matrix4Offset) {
+    //       // _endAnimate(limitedOffset, _matrix4.getMaxScaleOnAxis(), _rotation);
+    //       // _matrix4.translate(limitedOffset.dx, limitedOffset.dy);
+    //     }
+    //   }
+    // }
     _centerInsideMatrix = null;
-    _scaleGestureMatrixType = null;
+
   }
 
-  void _endAnimate(Offset offset, double scale) {
+  void _endAnimate(Offset offset, double scale, double rotation) {
     _beginMatrixAnimation = _MatrixAnimation(
         vector3ToOffset(_matrix4.getTranslation()),
-        _matrix4.getMaxScaleOnAxis()
+        _matrix4.getMaxScaleOnAxis(),
+        _rotation
     );
-    _endMatrixAnimation = _MatrixAnimation(offset, scale);
+    _endMatrixAnimation = _MatrixAnimation(offset, scale, rotation);
     _animation?.removeListener(_onAnimate);
     _controller.reset();
     _animation = Tween<double>(
@@ -283,6 +311,7 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
       setState(() {
         Offset offset = begin.offset * (1 - _animation!.value) + end.offset * _animation!.value;
         double scale = begin.scale * (1 - _animation!.value) + end.scale * _animation!.value;
+        // _matrix4 = Matrix4.identity()..rotateZ(rotation)..scale(scale
         _matrix4 = Matrix4.identity()..translate(offset.dx, offset.dy)..scale(scale);
         if(!_controller.isAnimating) {
           _animation?.removeListener(_onAnimate);
@@ -314,11 +343,30 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
 
 }
 
+typedef _OnUpdate<T> = T Function(T oldValue, T newValue);
+
+class _ValueUpdater<T> {
+  final _OnUpdate<T> onUpdate;
+  T value;
+
+  _ValueUpdater({
+    required this.value,
+    required this.onUpdate,
+  });
+
+  T update(T newValue) {
+    T updated = onUpdate(value, newValue);
+    value = newValue;
+    return updated;
+  }
+}
+
 class _MatrixAnimation {
   final Offset offset;
   final double scale;
+  final double rotation;
 
-  _MatrixAnimation(this.offset, this.scale);
+  _MatrixAnimation(this.offset, this.scale, this.rotation);
 }
 
 class ScaleGestureData {
@@ -327,10 +375,11 @@ class ScaleGestureData {
   Offset offset;
   final Size size;
   double scale;
+  double rotation;
 
-  ScaleGestureData(this.layout, this.offset, this.size, this.scale);
+  ScaleGestureData(this.layout, this.offset, this.size, this.scale, this.rotation);
 
-  factory ScaleGestureData.centerInside(Size layout, Size size) {
+  factory ScaleGestureData.centerInside(Size layout, Size size, double rotation) {
     double layoutRatio = layout.width / layout.height;
     double contentRatio = size.width / size.height;
     if(layoutRatio > contentRatio) {
@@ -343,7 +392,8 @@ class ScaleGestureData {
           layout,
           Offset(dx, dy),
           Size(width, height),
-          scale
+          scale,
+          rotation
       );
     } else {
       double scale = layout.width / size.width;
@@ -355,7 +405,8 @@ class ScaleGestureData {
           layout,
           Offset(dx, dy),
           Size(width, height),
-          scale
+          scale,
+          rotation
       );
     }
   }
@@ -425,25 +476,204 @@ Offset limitedLayoutOffset(Size layout, Offset offset, Size size) {
   return Offset(dx, dy);
 }
 
-Matrix4 _rotate(Matrix4 matrix4, double angle, Offset focalPoint) {
-  var c = cos(angle);
-  var s = sin(angle);
-  var dx = (1 - c) * focalPoint.dx + s * focalPoint.dy;
-  var dy = (1 - c) * focalPoint.dy - s * focalPoint.dx;
-
-  //  ..[0]  = c       # x scale
-  //  ..[1]  = s       # y skew
-  //  ..[4]  = -s      # x skew
-  //  ..[5]  = c       # y scale
-  //  ..[10] = 1       # diagonal "one"
-  //  ..[12] = dx      # x translation
-  //  ..[13] = dy      # y translation
-  //  ..[15] = 1       # diagonal "one"
-  // return Matrix4(c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, dx, dy, 0, 1);
-  return matrix4..rotateZ(angle)..translate(dx, dy);
+enum CropRatio {
+  original,
+  ratio_1x1,
+  ratio_3x4,
+  ratio_4x3,
+  ratio_9x16,
+  ratio_16x9,
 }
 
-enum _ScaleGestureMatrixType {
-  SCALE,
-  TRANSITION
+extension CropRatioExt on CropRatio {
+  double get aspectRatio {
+    switch (this) {
+      case CropRatio.original:
+        return 1;
+      case CropRatio.ratio_1x1:
+        return 1;
+      case CropRatio.ratio_3x4:
+        return 3/4;
+      case CropRatio.ratio_4x3:
+        return 4/3;
+      case CropRatio.ratio_9x16:
+        return 9/16;
+      case CropRatio.ratio_16x9:
+        return 16/9;
+    }
+  }
+  
+  String get strRatio {
+    switch (this) {
+      case CropRatio.original:
+        return 'original';
+      case CropRatio.ratio_1x1:
+        return '1:1';
+      case CropRatio.ratio_3x4:
+        return '3:4';
+      case CropRatio.ratio_4x3:
+        return '4:3';
+      case CropRatio.ratio_9x16:
+        return '9:16';
+      case CropRatio.ratio_16x9:
+        return '16:9';
+    }
+  }
+}
+
+class CropRenderObjectWidget extends SingleChildRenderObjectWidget {
+  final Key? key;
+  final double aspectRatio;
+  final Color dimColor;
+  final Color backgroundColor;
+  final BoxShape shape;
+
+  CropRenderObjectWidget({
+    required Widget child,
+    required this.aspectRatio,
+    required this.shape,
+    this.key,
+    this.backgroundColor: Colors.black,
+    this.dimColor: const Color.fromRGBO(0, 0, 0, 0.8),
+  }) : super(key: key, child: child);
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return RenderCrop()
+      ..aspectRatio = aspectRatio
+      ..dimColor = dimColor
+      ..backgroundColor = backgroundColor
+      ..shape = shape;
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, RenderCrop renderObject) {
+    bool needsPaint = false;
+    bool needsLayout = false;
+
+    if (renderObject.aspectRatio != aspectRatio) {
+      renderObject.aspectRatio = aspectRatio;
+      needsLayout = true;
+    }
+
+    if (renderObject.dimColor != dimColor) {
+      renderObject.dimColor = dimColor;
+      needsPaint = true;
+    }
+
+    if (renderObject.shape != shape) {
+      renderObject.shape = shape;
+      needsPaint = true;
+    }
+
+    if (renderObject.backgroundColor != backgroundColor) {
+      renderObject.backgroundColor = backgroundColor;
+      needsPaint = true;
+    }
+
+    if (needsLayout) {
+      renderObject.markNeedsLayout();
+    }
+    if (needsPaint) {
+      renderObject.markNeedsPaint();
+    }
+
+    super.updateRenderObject(context, renderObject);
+  }
+}
+
+class RenderCrop extends RenderBox with RenderObjectWithChildMixin<RenderBox> {
+  double? aspectRatio;
+  Color? dimColor;
+  Color? backgroundColor;
+  BoxShape? shape;
+
+  @override
+  bool hitTestSelf(Offset position) => false;
+
+  @override
+  void performLayout() {
+    final BoxConstraints constraints = this.constraints;
+    size = constraints.biggest;
+
+    if (child != null) {
+      final forcedSize =
+      _getSizeToFitByRatio(aspectRatio!, size.width, size.height);
+      child!.layout(BoxConstraints.tight(forcedSize), parentUsesSize: true);
+    }
+  }
+
+  Path _getDimClipPath() {
+    final center = Offset(
+      size.width / 2,
+      size.height / 2,
+    );
+
+    final forcedSize =
+    _getSizeToFitByRatio(aspectRatio!, size.width, size.height);
+    Rect rect = Rect.fromCenter(
+        center: center, width: forcedSize.width, height: forcedSize.height);
+
+    final path = Path();
+    if (shape == BoxShape.circle) {
+      path.addOval(rect);
+    } else if (shape == BoxShape.rectangle) {
+      path.addRect(rect);
+    }
+
+    path.addRect(Rect.fromLTWH(0.0, 0.0, size.width, size.height));
+    path.fillType = PathFillType.evenOdd;
+    return path;
+  }
+
+  @override
+  void handleEvent(PointerEvent event, BoxHitTestEntry entry) {}
+
+  void paint(PaintingContext context, Offset offset) {
+    final bounds = offset & size;
+
+    if (backgroundColor != null) {
+      context.canvas.drawRect(bounds, Paint()..color = backgroundColor!);
+    }
+
+    final forcedSize =
+    _getSizeToFitByRatio(aspectRatio!, size.width, size.height);
+
+    if (child != null) {
+      final Offset tmp = (size - forcedSize) as Offset;
+      context.paintChild(child!, offset + tmp / 2);
+
+      final clipPath = _getDimClipPath();
+
+      context.pushClipPath(
+        needsCompositing,
+        offset,
+        bounds,
+        clipPath,
+            (context, offset) {
+          context.canvas.drawRect(bounds, Paint()..color = dimColor!);
+        },
+      );
+    }
+  }
+}
+
+Size _getSizeToFitByRatio(
+    double imageAspectRatio, double containerWidth, double containerHeight) {
+  var targetAspectRatio = containerWidth / containerHeight;
+
+  // no need to adjust the size if current size is square
+  var adjustedWidth = containerWidth;
+  var adjustedHeight = containerHeight;
+
+  // get the larger aspect ratio of the two
+  // if aspect ratio is 1 then no adjustment needed
+  if (imageAspectRatio > targetAspectRatio) {
+    adjustedHeight = containerWidth / imageAspectRatio;
+  } else if (imageAspectRatio < targetAspectRatio) {
+    adjustedWidth = containerHeight * imageAspectRatio;
+  }
+
+  // set the adjusted size (same if square)
+  return Size(adjustedWidth, adjustedHeight);
 }

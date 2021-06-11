@@ -1,15 +1,11 @@
-import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:crop/crop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_app_getx/base/base_provider.dart';
-import 'package:flutter_app_getx/page/crop/crop_by_goo.dart';
 import 'package:flutter_app_getx/widget/animation_list.dart';
 import 'package:flutter_app_getx/widget/custom_side_navbar.dart';
 import 'package:flutter_app_getx/widget/matrix_gesture_detector.dart';
 import 'package:get/get.dart';
-import 'package:photo_manager/photo_manager.dart';
 
 import 'home_controller.dart';
 
@@ -165,16 +161,16 @@ class Home extends BaseProvider<HomeController> {
                   child: Row(
                     children: [
                       Expanded(flex: 1, child: TextButton(
-                          onPressed: () => Get.to(() => Test()),
-                          child: Text('test'))
-                      ),
-                      Expanded(flex: 1, child: TextButton(
-                          onPressed: () => Get.toNamed('/crop'),
-                          child: Text('crop test'))
+                          onPressed: () => Get.toNamed('/crop_by_goo'),
+                          child: Text('crop by goo'))
                       ),
                       Expanded(flex: 1, child: TextButton(
                           onPressed: () => Get.to(TransformDemo()),
                           child: Text('crop TransformDemo'))
+                      ),
+                      Expanded(flex: 1, child: TextButton(
+                          onPressed: () => Get.to(CropLibraryTest()),
+                          child: Text('CropLibraryTest'))
                       ),
                       Expanded(flex: 1, child: TextButton(onPressed: insert, child: Text('insert'))),
                       Expanded(flex: 1, child: TextButton(onPressed: remove, child: Text('remove'))),
@@ -189,12 +185,12 @@ class Home extends BaseProvider<HomeController> {
   }
 }
 
-class Test extends StatefulWidget {
+class CropLibraryTest extends StatefulWidget {
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _CropLibraryTestState createState() => _CropLibraryTestState();
 }
 
-class _MyHomePageState extends State<Test> {
+class _CropLibraryTestState extends State<CropLibraryTest> {
   final controller = CropController(aspectRatio: 1000 / 667.0);
   double _rotation = 0;
   BoxShape shape = BoxShape.rectangle;

@@ -144,7 +144,9 @@ class _MatrixGestureDetectorState extends State<MatrixGestureDetector> {
     // handle matrix translating
     if (widget.shouldTranslate) {
       Offset translationDelta = translationUpdater.update(details.focalPoint);
-      translationDeltaMatrix = _translate(translationDelta);
+      // translationDeltaMatrix = _translate(translationDelta);
+      translationDeltaMatrix = Matrix4.identity()..translate(translationDelta.dx, translationDelta.dy);
+      print('KBG translationDeltaMatrix : $translationDeltaMatrix');
       matrix = translationDeltaMatrix * matrix;
     }
 
