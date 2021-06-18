@@ -1,5 +1,4 @@
 import 'package:flutter_app_getx/base/base_controller.dart';
-import 'package:flutter_app_getx/util/log.dart';
 import 'package:get/get.dart';
 
 class HomeController extends BaseController {

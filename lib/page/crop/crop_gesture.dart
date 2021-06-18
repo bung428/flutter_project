@@ -1,6 +1,15 @@
+import 'dart:async';
+import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:vector_math/vector_math_64.dart' as vm;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_app_getx/page/crop/crop_library.dart';
 import 'package:flutter_app_getx/values/text_style.dart';
 import 'package:flutter_app_getx/values/values.dart';
+import 'package:collision/collision.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3;
 
 import 'package:flutter/rendering.dart';
@@ -26,7 +35,8 @@ class CropGesture extends StatefulWidget {
 
 class _CropGestureState extends State<CropGesture>  with SingleTickerProviderStateMixin {
 
-  final GlobalKey viewGlobalKey = GlobalKey();
+  final GlobalKey _viewGlobalKey = GlobalKey();
+  final GlobalKey _imageKey = GlobalKey();
 
   Matrix4 _matrix4 = Matrix4.identity();
 
@@ -34,7 +44,11 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
   final double maxViewScale = 20.0;
 
   late double _previousScale;
+  Offset translateDelta = Offset.zero;
+  double scaleDelta = 1;
   double _rotation = 0.0;
+  double _currentRotation = 0.0;
+
   double? _imageWidth;
   double? _imageHeight;
 
@@ -43,23 +57,70 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
 
   ScaleGestureData? _centerInsideMatrix;
 
+  ui.Image? _image;
+
+  Offset canvasTL = Offset.zero;
+  Offset canvasTR = Offset.zero;
+  Offset canvasBR = Offset.zero;
+  Offset canvasBL = Offset.zero;
+
   @override
   void initState() {
-    _controller = AnimationController(duration: Duration(seconds: 2),vsync: this);
     super.initState();
+    _controller = AnimationController(duration: Duration(seconds: 2),vsync: this);
+
+    loadImage();
+  }
+
+  void getImageCanvas() {
+    if (mounted) {
+      final context = _imageKey.currentContext;
+      setState(() {
+        if (context != null) {
+          final sz = context.size!;
+          final w = sz.width;
+          final h = sz.height;
+          final canvas = Rectangle.fromLTWH(0, 0, w, h);
+
+          canvasTL = Offset(canvas.topLeft.x, canvas.topLeft.y);
+          canvasTR = Offset(canvas.topRight.x, canvas.topRight.y);
+          canvasBL = Offset(canvas.bottomLeft.x, canvas.bottomLeft.y);
+          canvasBR = Offset(canvas.bottomRight.x, canvas.bottomRight.y);
+        }
+      });
+    }
+  }
+
+  void loadImage() async {
+    ui.Image? image = await getBitmapImage();
+    if(mounted) {
+      setState(() {
+        if (image != null) {
+          _image = image;
+          _imageWidth = image.width.toDouble();
+          _imageHeight = image.height.toDouble();
+
+          getImageCanvas();
+        }
+      });
+    }
+  }
+
+  Future<ui.Image?> getBitmapImage() async {
+    final ByteData assetImageByteData = await rootBundle.load('assets/images/20191007_152848.jpg');
+    final Uint8List list= assetImageByteData.buffer.asUint8List();
+    ui.Codec codec = await ui.instantiateImageCodec(list);
+    ui.FrameInfo frameInfo = await codec.getNextFrame();
+    return frameInfo.image;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        GestureDetector(
-          key: viewGlobalKey,
-          behavior: HitTestBehavior.opaque,
-          onScaleStart: onScaleStart,
-          onScaleUpdate: onScaleUpdate,
-          onScaleEnd: onScaleEnd,
-          child: Container(
+    Widget _child () {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(
             width: double.infinity,
             height: double.infinity,
             decoration: BoxDecoration(
@@ -69,56 +130,47 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
                 )
             ),
             child: Transform(
-              transform: _matrix4,
-              alignment: Alignment.topLeft,
-              child: Image.asset(
-                'assets/images/20191007_152848.jpg',
-                fit: BoxFit.contain,
-                width: double.infinity,
-                height: double.infinity,
-                frameBuilder: (BuildContext context, Widget child, int? frame, bool wasSynchronouslyLoaded) {
-                  if(_imageWidth == null || _imageHeight == null) {
-                    if(child is Semantics) {
-                      final rawImage = child.child;
-                      if(rawImage is RawImage) {
-                        _imageWidth = rawImage.image?.width.toDouble();
-                        _imageHeight = rawImage.image?.height.toDouble();
-                        // _aspectRatio = (_imageWidth ?? 1.0) / (_imageHeight ?? 1.0);
-                      }
-                    }
-                  }
-                  final width = _imageWidth;
-                  final height = _imageHeight;
-                  if(width != null && height != null) {
-                    return Stack(
-                      children: [
-                        child,
-                        Positioned.fill(
-                          child: Align(
-                            alignment: Alignment.center,
-                            child: Text(
-                              'Offset : ${Offset(_matrix4.getTranslation().x, _matrix4.getTranslation().y)}'
-                                  '\nScale : ${_matrix4.getMaxScaleOnAxis()}'
-                              , style: textStyle.white500(20),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-
-                  return child;
-                },
-              ),
+                transform: _matrix4,
+                alignment: Alignment.center,
+                child: RawImage(
+                  key: _imageKey,
+                  image: _image,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                )
             ),
           ),
+        ],
+      );
+    }
+
+    return Stack(
+      children: [
+        GestureDetector(
+          key: _viewGlobalKey,
+          behavior: HitTestBehavior.opaque,
+          onScaleStart: onScaleStart,
+          onScaleUpdate: onScaleUpdate,
+          onScaleEnd: onScaleEnd,
+          child: _child(),
         ),
         CropRenderObjectWidget(
           aspectRatio: widget.ratio,
           backgroundColor: Colors.transparent,
           shape: BoxShape.rectangle,
           dimColor: Colors.black.withOpacity(0.6),
-          child: Text('test ing'),
+          child: Container(),
+        ),
+        AnimatedPositioned(
+          duration: Duration(milliseconds: 300),
+          top: canvasTL.dy,
+          left: canvasTL.dx,
+          child: Container(
+            color: Colors.cyan,
+            height: 10,
+            width: 10,
+          ),
         ),
       ],
     );
@@ -135,6 +187,7 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
 
   Offset _startOffset = Offset.zero;
   Offset _endOffset = Offset.zero;
+  Offset _previousOffset = Offset.zero;
 
   void onScaleStart(ScaleStartDetails details) {
     final Offset focalPointScene = fromViewport(
@@ -147,10 +200,10 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
     _previousScale = scale;
     scaleUpdater.value = scale;
 
-    rotationUpdater.value = _rotation;
+    rotationUpdater.value = _currentRotation;
 
-    if (_centerInsideMatrix == null && viewGlobalKey.currentContext != null && _imageWidth != null && _imageHeight != null) {
-      _centerInsideMatrix = ScaleGestureData.centerInside(viewGlobalKey.currentContext!.size!, Size(_imageWidth!, _imageHeight!), _rotation);
+    if (_centerInsideMatrix == null && _imageKey.currentContext != null && _imageWidth != null && _imageHeight != null) {
+      _centerInsideMatrix = ScaleGestureData.centerInside(_imageKey.currentContext!.size!, Size(_imageWidth!, _imageHeight!), _rotation);
       _animation?.removeListener(_onAnimate);
       _animation = null;
       _controller.reset();
@@ -161,6 +214,7 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
     if(_centerInsideMatrix == null) {
       return;
     }
+    scaleDelta = 1.0;
 
     final Offset focalPointScene = fromViewport(
       details.localFocalPoint,
@@ -169,43 +223,44 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
     _endOffset = focalPointScene;
 
     if (details.pointerCount < 2) {
-      Offset translationChange = _endOffset - _startOffset;
-      _matrix4.translate(translationChange.dx, translationChange.dy);
+      translateDelta = _endOffset - _startOffset;
+      _matrix4.translate(translateDelta.dx, translateDelta.dy);
+      canvasTL = canvasTL.translate(translateDelta.dx, translateDelta.dy);
 
       setState(() {});
     }
 
     if (details.scale != 1.0) {
-      double scaleDelta = scaleUpdater.update(_previousScale * details.scale);
-      _matrix4.scale(scaleDelta);
       final Offset focalPointSceneNext = fromViewport(
         details.localFocalPoint,
         _matrix4,
       );
-      Offset offset = focalPointSceneNext - focalPointScene;
-      _matrix4.translate(offset.dx, offset.dy);
+      translateDelta = focalPointSceneNext - _previousOffset;
+      _matrix4.translate(translateDelta.dx / 2, translateDelta.dy / 2);
+      _previousOffset = focalPointSceneNext;
+
+      scaleDelta = scaleUpdater.update(_previousScale * details.scale);
+      _matrix4.scale(scaleDelta);
+      // final test = Matrix4(scaleDelta, 0, 0, 0, 0, scaleDelta, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+      // _matrix4 = test * _matrix4;
 
       setState(() {});
-      // double scale = _matrix4.getMaxScaleOnAxis();
-      // _previousScale = scale;
     }
 
     if (details.rotation != 0.0) {
       double rotationDelta = rotationUpdater.update(details.rotation);
       _matrix4.rotateZ(rotationDelta);
-      print('KBG scaleUpd rot : $rotationDelta');
       final Offset focalPointSceneNext = fromViewport(
         details.localFocalPoint,
         _matrix4,
       );
-      Offset offset = focalPointSceneNext - focalPointScene;
-      _matrix4.translate(offset.dx, offset.dy);
+      // translateDelta = focalPointSceneNext - focalPointScene;
+      // _matrix4.translate(translateDelta.dx, translateDelta.dy);
 
       setState(() {});
-      _rotation = rotationDelta;
+      _currentRotation = rotationDelta;
+      _rotation += rotationDelta;
     }
-
-    // _currentPointerCnt = details.pointerCount;
   }
 
   _MatrixAnimation? _beginMatrixAnimation;
@@ -215,18 +270,16 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
     if(_centerInsideMatrix == null) {
       return;
     }
-
-    print('-----------------------------------------------------------------------------------------------');
-    print('KBG scaleEnd rot : $_rotation');
-    print('KBG scaleEnd scale : ${_matrix4.getMaxScaleOnAxis()}');
-
-    if(_matrix4.getMaxScaleOnAxis() <= 1.0) {
-      _endAnimate(Offset.zero, 1.0, _rotation);
-      _matrix4.rotateZ(0.123423);
-      setState(() {
-
-      });
-    }
+    _reCenterImage();
+    // if (size != null) {
+    //   if(_matrix4.getMaxScaleOnAxis() < 1.0) {
+    //     _endAnimate(Offset(size.width / 2, 0), 1.0, _rotation);
+    //     // _matrix4.rotateZ(0.123423);
+    //     // setState(() {
+    //     //
+    //     // });
+    //   }
+    // }
     // else {
     //   final double velocityTotal = details.velocity.pixelsPerSecond.dx.abs()
     //       + details.velocity.pixelsPerSecond.dy.abs();
@@ -286,6 +339,161 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
 
   }
 
+  double _getMinScale() {
+    final r = vm.radians(_rotation % 360);
+    final rabs = r.abs();
+
+    final sinr = sin(rabs).abs();
+    final cosr = cos(rabs).abs();
+
+    final x = cosr * (3.0 / 4.0) + sinr;
+    final y = sinr * (3.0 / 4.0) + cosr;
+
+    final m = max(x / (3.0 / 4.0), y);
+
+    return m;
+  }
+
+  vm.Vector2 _toVector2(Offset offset) => vm.Vector2(offset.dx, offset.dy);
+  Offset _toOffset(vm.Vector2 v) => Offset(v.x, v.y);
+
+  void _reCenterImage([bool animate = true]) {
+    // _beginMatrixAnimation = _MatrixAnimation(
+    //     vector3ToOffset(_matrix4.getTranslation()),
+    //     _matrix4.getMaxScaleOnAxis(),
+    //     _rotation
+    // );
+    // _endMatrixAnimation = _MatrixAnimation(offset, scale, rotation);
+    // _animation?.removeListener(_onAnimate);
+    // _controller.reset();
+    // _animation = Tween<double>(
+    //   begin: 0,
+    //   end: 1,
+    // ).animate(_controller);
+    // _animation!.addListener(_onAnimate);
+    // _controller.fling();
+    // final animation = _animation;
+    // final begin = _beginMatrixAnimation;
+    // final end = _endMatrixAnimation;
+    // if(animation != null && begin != null && end != null) {
+    //   setState(() {
+    //     Offset offset = begin.offset * (1 - _animation!.value) + end.offset * _animation!.value;
+    //     double scale = begin.scale * (1 - _animation!.value) + end.scale * _animation!.value;
+    //     double rotation = begin.rotation * (1 - _animation!.value) + end.rotation * _animation!.value;
+    //     // _matrix4 = Matrix4.identity()..rotateZ(rotation)..scale(scale
+    //     _matrix4 = Matrix4.identity()..translate(offset.dx, offset.dy)..rotateZ(rotation)..scale(scale);
+    //     if(!_controller.isAnimating) {
+    //       _animation?.removeListener(_onAnimate);
+    //       _animation = null;
+    //       _controller.reset();
+    //       if(scale == 1) {
+    //         // widget.onScaled(false);
+    //       }
+    //     }
+    //   });
+    // }
+
+
+    final sz = _viewGlobalKey.currentContext!.size!;
+    print('KBG sz : $sz');
+    final s = scaleDelta * _getMinScale();
+    print('KBG s : $s');
+    final w = sz.width;
+    final h = sz.height;
+    final offset = _toVector2(translateDelta);
+    print('KBG translateDelta : $translateDelta');
+    print('KBG offset : $offset');
+    final canvas = Rectangle.fromLTWH(0, 0, w, h);
+    print('KBG canvas.center : ${canvas.center}');
+    final obb = Obb2(
+      center: offset + canvas.center,
+      width: w * s,
+      height: h * s,
+      rotation: _rotation,
+    );
+    print('KBG obb : center : ${obb.center}');
+    print('KBG obb : height : ${obb.height}');
+    print('KBG obb : width : ${obb.width}');
+    print('KBG obb : rotation : ${obb.rotation}');
+
+    final bakedObb = obb.bake();
+
+    print('KBG bakedObb : topLeft : ${bakedObb.topLeft}');
+    print('KBG bakedObb : topRight : ${bakedObb.topRight}');
+    print('KBG bakedObb : bottomRight : ${bakedObb.bottomRight}');
+    print('KBG bakedObb : bottomLeft : ${bakedObb.bottomLeft}');
+    print('KBG bakedObb : topEdge : ${bakedObb.topEdge}');
+    print('KBG bakedObb : bottomEdge : ${bakedObb.bottomEdge}');
+    print('KBG bakedObb : leftEdge : ${bakedObb.leftEdge}');
+    print('KBG bakedObb : rightEdge : ${bakedObb.rightEdge}');
+
+    // _startOffset = widget.controller._offset;
+    // _endOffset = widget.controller._offset;
+    //
+    final ctl = canvas.topLeft;
+    final ctr = canvas.topRight;
+    final cbr = canvas.bottomRight;
+    final cbl = canvas.bottomLeft;
+
+    final ll = Line(bakedObb.topLeft, bakedObb.bottomLeft);
+    final tt = Line(bakedObb.topRight, bakedObb.topLeft);
+    final rr = Line(bakedObb.bottomRight, bakedObb.topRight);
+    final bb = Line(bakedObb.bottomLeft, bakedObb.bottomRight);
+
+    print('KBG ll : $ll');
+    print('KBG tt : $tt');
+    print('KBG rr : $rr');
+    print('KBG bb : $bb');
+
+    final tl = ll.project(ctl);
+    final tr = tt.project(ctr);
+    final br = rr.project(cbr);
+    final bl = bb.project(cbl);
+
+    print('KBG tl : $tl');
+    print('KBG tr : $tr');
+    print('KBG br : $br');
+    print('KBG bl : $bl');
+
+    final dtl = ll.distanceToPoint(ctl);
+    final dtr = tt.distanceToPoint(ctr);
+    final dbr = rr.distanceToPoint(cbr);
+    final dbl = bb.distanceToPoint(cbl);
+
+    print('KBG dtl : $dtl');
+    print('KBG dtr : $dtr');
+    print('KBG dbr : $dbr');
+    print('KBG dbl : $dbl');
+    // if (dtl > 0) {
+    //   final d = _toOffset(ctl - tl);
+    //   _endOffset += d;
+    // }
+    //
+    // if (dtr > 0) {
+    //   final d = _toOffset(ctr - tr);
+    //   _endOffset += d;
+    // }
+    //
+    // if (dbr > 0) {
+    //   final d = _toOffset(cbr - br);
+    //   _endOffset += d;
+    // }
+    // if (dbl > 0) {
+    //   final d = _toOffset(cbl - bl);
+    //   _endOffset += d;
+    // }
+    // if (animate) {
+    //   if (_controller.isCompleted || _controller.isAnimating) {
+    //     _controller.reset();
+    //   }
+    //   _controller.forward();
+    // } else {
+    //   _startOffset = _endOffset;
+    // }
+    //
+    setState(() {});
+  }
+
   void _endAnimate(Offset offset, double scale, double rotation) {
     _beginMatrixAnimation = _MatrixAnimation(
         vector3ToOffset(_matrix4.getTranslation()),
@@ -311,8 +519,9 @@ class _CropGestureState extends State<CropGesture>  with SingleTickerProviderSta
       setState(() {
         Offset offset = begin.offset * (1 - _animation!.value) + end.offset * _animation!.value;
         double scale = begin.scale * (1 - _animation!.value) + end.scale * _animation!.value;
+        double rotation = begin.rotation * (1 - _animation!.value) + end.rotation * _animation!.value;
         // _matrix4 = Matrix4.identity()..rotateZ(rotation)..scale(scale
-        _matrix4 = Matrix4.identity()..translate(offset.dx, offset.dy)..scale(scale);
+        _matrix4 = Matrix4.identity()..translate(offset.dx, offset.dy)..rotateZ(rotation)..scale(scale);
         if(!_controller.isAnimating) {
           _animation?.removeListener(_onAnimate);
           _animation = null;
@@ -476,6 +685,8 @@ Offset limitedLayoutOffset(Size layout, Offset offset, Size size) {
   return Offset(dx, dy);
 }
 
+
+
 enum CropRatio {
   original,
   ratio_1x1,
@@ -502,7 +713,7 @@ extension CropRatioExt on CropRatio {
         return 16/9;
     }
   }
-  
+
   String get strRatio {
     switch (this) {
       case CropRatio.original:

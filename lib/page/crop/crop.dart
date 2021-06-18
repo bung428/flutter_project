@@ -1,10 +1,12 @@
 import 'dart:ui'as ui;
 
-import 'package:crop/crop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:permission_handler/permission_handler.dart';
+
+import 'crop_library.dart';
 
 class CropPage extends StatefulWidget {
   @override
@@ -12,7 +14,7 @@ class CropPage extends StatefulWidget {
 }
 
 class _State extends State<CropPage> {
-  final controller = CropController(aspectRatio: 1000 / 667.0);
+  final controller = CropController(aspectRatio: 3.0 / 4.0);
   double _rotation = 0;
 
   void _cropImage() async {
@@ -76,17 +78,16 @@ class _State extends State<CropPage> {
         children: <Widget>[
           Expanded(
             child: Container(
-              padding: EdgeInsets.all(8),
+              // padding: EdgeInsets.all(8),
               child: Crop(
                 onChanged: (decomposition) {
-                  if (_rotation != decomposition.rotation) {
-                    setState(() {
-                      _rotation = ((decomposition.rotation + 180) % 360) - 180;
-                    });
-                  }
+                  // if (_rotation != decomposition.rotation) {
+                  //   setState(() {
+                  //     _rotation = ((decomposition.rotation + 180) % 360) - 180;
+                  //   });
+                  // }
 
-                  print(
-                      "Scale : ${decomposition.scale}, Rotation: ${decomposition.rotation}, translation: ${decomposition.translation}");
+                  print("Scale : ${decomposition.scale}, Rotation: ${decomposition.rotation}, translation: ${decomposition.translation}");
                 },
                 controller: controller,
                 child: Image.asset(

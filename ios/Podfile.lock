@@ -46,7 +46,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   album_plugin: 4e18b9a82594e68438c12dc01b4822dd57e16dc8
-  camera: a0ca5080336f7af47b88436e5e26da3dee5568f0
+  camera: 3164201dc344383e62282964016528c4f5a9ad50
   Flutter: 434fef37c0980e73bb6479ef766c45957d4b510c
   image_gallery_saver: 259eab68fb271cfd57d599904f7acdc7832e7ef2
   image_picker: 50e7c7ff960e5f58faa4d1f4af84a771c671bc4a

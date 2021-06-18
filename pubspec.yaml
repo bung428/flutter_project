@@ -43,6 +43,7 @@ dependencies:
   url_launcher: ^6.0.5
   image_gallery_saver: ^1.6.9
   permission_handler: ^8.0.0+2
+  image: ^3.0.2
 
 dev_dependencies:
   flutter_test:
